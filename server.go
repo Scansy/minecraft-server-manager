@@ -1,9 +1,11 @@
+package main
+
 import "os"
 
 type Server struct {
 	Name string
 	path string
-	process Process
+	process os.Process
 }
 
 func (s *Server) Start() {
