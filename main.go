@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
+	"syscall"
 )
 
 type MenuItem struct {
@@ -22,7 +25,7 @@ func main() {
 
 	for {
 		fmt.Println("What would you like to do?")
-		fmt.Println("1. Start server\n2. Stop server\n3. Server status\n4. Quit")
+		printMenuItems(menuItems)
 		var choice int
 		_, err := fmt.Scanln(&choice)
 		if err != nil {
@@ -38,11 +41,18 @@ func main() {
 	}
 }
 
+// Prints the menu items
+func printMenuItems(items []MenuItem) {
+	for i, item := range items {
+		fmt.Printf("%v. %v\n", i+1, item.title)
+	} 
+}
+
 // Creates the menu items
 func createMenuItems() []MenuItem {
 	var menuItems []MenuItem = make([]MenuItem, 0, 10)
-	menuItems = append(menuItems, MenuItem{title: "Start server", action: func(){}})	
-	menuItems = append(menuItems, MenuItem{title: "Stop server", action: func(){}})	
+	menuItems = append(menuItems, createStartServerMenu()) 
+	menuItems = append(menuItems, createStopServerMenu())	
 	menuItems = append(menuItems, MenuItem{title: "Server status", action: func(){}})	
 	menuItems = append(menuItems, MenuItem{title: "Quit", action: func(){
 		fmt.Println("Bye!")
@@ -50,6 +60,55 @@ func createMenuItems() []MenuItem {
 		}})	
 
 	return menuItems
+}
+
+// Creates the Start server menu
+func createStartServerMenu() MenuItem {
+	title := "Start server"
+	action := func() {
+		serverProcess := exec.Command("java", "-Xmx4G", "-Xms4G", "-jar", "server.jar", "nogui")	
+		serverProcess.Dir = "./server"
+		serverProcess.Stderr = os.Stderr
+		serverProcess.Stdout = os.Stdout
+		err := serverProcess.Start()
+		if err != nil {
+			printError("Failed to start server.")
+			return
+		}
+		pid := serverProcess.Process.Pid
+		os.WriteFile("./pid.txt", []byte(fmt.Sprintf("%v", pid)), 0644)
+	}
+
+	return MenuItem{title, action}
+}
+
+// Creates the Stop server menu
+func createStopServerMenu() MenuItem {
+	title := "Stop server"
+	action := func() {
+		pidByte, err := os.ReadFile("./pid.txt")
+		if err != nil {
+			printError("Couldn't find pid.txt")
+		}
+
+		pid, err := strconv.Atoi(string(pidByte[:]))
+		if err != nil {
+			printError("Couldn't convert PID into int")
+		}
+		
+		serverProcess, err := os.FindProcess(pid)
+		if err != nil {
+			printError("Couldn't find server process")
+		}
+
+		err = serverProcess.Signal(syscall.SIGTERM)
+		if err != nil {
+			printError("Couldn't SIGTERM the server")
+		}
+		serverProcess.Wait()
+	}
+	
+	return MenuItem{title, action}
 }
 
 // Validates if the input falls within min and max, inclusive 
